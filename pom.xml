@@ -20,7 +20,7 @@ version="1.0" encoding="UTF-8"?>
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.github.danghuutoan.kafka.connect.transforms</groupId>
-    <artifactId>ExtractNewRecordState</artifactId>
+    <artifactId>InsertKey</artifactId>
     <version>1.0-SNAPSHOT</version>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
