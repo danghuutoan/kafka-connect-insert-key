@@ -135,8 +135,8 @@ public class InsertKeyTest {
         xform.configure(Collections.singletonMap("fields", "not_exist"));
 
         final Schema valueSchema = SchemaBuilder.struct()
-            .field("a", Schema.INT32_SCHEMA)
-            .build();
+                .field("a", Schema.INT32_SCHEMA)
+                .build();
 
         final Struct value = new Struct(valueSchema);
         value.put("a", 1);
@@ -145,5 +145,35 @@ public class InsertKeyTest {
 
         DataException actual = assertThrows(DataException.class, () -> xform.apply(record));
         assertEquals("Field does not exist: not_exist", actual.getMessage());
+    }
+    
+    @Test
+    public void mustNotChangeValue() {
+        xform.configure(Collections.singletonMap("fields", "b"));
+
+        final Schema valueSchema = SchemaBuilder.struct()
+                .field("a", Schema.INT32_SCHEMA)
+                .field("b", Schema.INT32_SCHEMA)
+                .field("c", Schema.INT32_SCHEMA)
+                .build();
+
+        final Schema keySchema = SchemaBuilder.struct()
+                .field("a", Schema.INT32_SCHEMA)
+                        .build();
+
+        final Struct value = new Struct(valueSchema);
+        value.put("a", 1);
+        value.put("b", 2);
+        value.put("c", 3);
+
+        final Struct key = new Struct(keySchema);
+        key.put("a", 1);
+
+        final SinkRecord record = new SinkRecord("", 0, keySchema, key, valueSchema, value, 0);
+        final SinkRecord transformedRecord = xform.apply(record);
+
+
+        assertEquals(value, transformedRecord.value());
+        assertEquals(valueSchema, transformedRecord.valueSchema());
     }
 }
