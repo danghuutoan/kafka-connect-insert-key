@@ -25,6 +25,9 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import io.debezium.data.Envelope;
+
+import java.time.Instant;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -39,6 +42,34 @@ public class InsertFieldTest {
     private InsertField<SourceRecord> xformKey = new InsertField.Key<>();
     private InsertField<SourceRecord> xformValue = new InsertField.Value<>();
 
+    final Schema recordSchema = SchemaBuilder.struct()
+            .field("id", Schema.INT8_SCHEMA)
+            .field("name", Schema.STRING_SCHEMA)
+            .build();
+
+    final Schema sourceSchema = SchemaBuilder.struct()
+            .field("lsn", Schema.INT32_SCHEMA)
+            .field("ts_ms", Schema.OPTIONAL_INT32_SCHEMA)
+            .build();
+
+    final Envelope envelope = Envelope.defineSchema()
+            .withName("dummy.Envelope")
+            .withRecord(recordSchema)
+            .withSource(sourceSchema)
+            .build();
+
+    private SourceRecord createCreateRecord() {
+        final Struct before = new Struct(recordSchema);
+        final Struct source = new Struct(sourceSchema);
+
+        before.put("id", (byte) 1);
+        before.put("name", "myRecord");
+        source.put("lsn", 1234);
+        source.put("ts_ms", 12836);
+        final Struct payload = envelope.create(before, source, Instant.now());
+        return new SourceRecord(new HashMap<>(), new HashMap<>(), "dummy", envelope.schema(), payload);
+    }
+
     @AfterEach
     public void teardown() {
         xformValue.close();
@@ -48,7 +79,7 @@ public class InsertFieldTest {
     public void topLevelStructRequired() {
         xformValue.configure(Collections.singletonMap("topic.field", "topic_field"));
         assertThrows(DataException.class,
-            () -> xformValue.apply(new SourceRecord(null, null, "", 0, Schema.INT32_SCHEMA, 42)));
+                () -> xformValue.apply(new SourceRecord(null, null, "", 0, Schema.INT32_SCHEMA, 42)));
     }
 
     @Test
@@ -62,10 +93,12 @@ public class InsertFieldTest {
 
         xformValue.configure(props);
 
-        final Schema simpleStructSchema = SchemaBuilder.struct().name("name").version(1).doc("doc").field("magic", Schema.OPTIONAL_INT64_SCHEMA).build();
+        final Schema simpleStructSchema = SchemaBuilder.struct().name("name").version(1).doc("doc")
+                .field("magic", Schema.OPTIONAL_INT64_SCHEMA).build();
         final Struct simpleStruct = new Struct(simpleStructSchema).put("magic", 42L);
 
-        final SourceRecord record = new SourceRecord(null, null, "test", 0, null, null, simpleStructSchema, simpleStruct, 789L);
+        final SourceRecord record = new SourceRecord(null, null, "test", 0, null, null, simpleStructSchema,
+                simpleStruct, 789L);
         final SourceRecord transformedRecord = xformValue.apply(record);
 
         assertEquals(simpleStructSchema.name(), transformedRecord.valueSchema().name());
@@ -81,7 +114,8 @@ public class InsertFieldTest {
         assertEquals(Schema.OPTIONAL_INT32_SCHEMA, transformedRecord.valueSchema().field("partition_field").schema());
         assertEquals(0, ((Struct) transformedRecord.value()).getInt32("partition_field").intValue());
 
-        assertEquals(Timestamp.builder().optional().build(), transformedRecord.valueSchema().field("timestamp_field").schema());
+        assertEquals(Timestamp.builder().optional().build(),
+                transformedRecord.valueSchema().field("timestamp_field").schema());
         assertEquals(789L, ((Date) ((Struct) transformedRecord.value()).get("timestamp_field")).getTime());
 
         assertEquals(Schema.OPTIONAL_STRING_SCHEMA, transformedRecord.valueSchema().field("instance_id").schema());
@@ -147,7 +181,8 @@ public class InsertFieldTest {
 
         xformValue.configure(props);
 
-        final Schema simpleStructSchema = SchemaBuilder.struct().name("name").version(1).doc("doc").field("magic", Schema.OPTIONAL_INT64_SCHEMA).build();
+        final Schema simpleStructSchema = SchemaBuilder.struct().name("name").version(1).doc("doc")
+                .field("magic", Schema.OPTIONAL_INT64_SCHEMA).build();
 
         final SourceRecord record = new SourceRecord(null, null, "test", 0,
                 simpleStructSchema, null);
@@ -170,7 +205,7 @@ public class InsertFieldTest {
         xformKey.configure(props);
 
         final SourceRecord record = new SourceRecord(null, null, "test", 0,
-            null, Collections.singletonMap("magic", 42L), null, null);
+                null, Collections.singletonMap("magic", 42L), null, null);
 
         final SourceRecord transformedRecord = xformKey.apply(record);
 
@@ -194,7 +229,22 @@ public class InsertFieldTest {
         xformKey.configure(props);
 
         final SourceRecord record = new SourceRecord(null, null, "test", 0,
-            null, null, null, Collections.singletonMap("magic", 42L));
+                null, null, null, Collections.singletonMap("magic", 42L));
+
+        final SourceRecord transformedRecord = xformKey.apply(record);
+
+        assertSame(record, transformedRecord);
+    }
+
+
+    @Test
+    public void insertDynamicField() {
+        final Map<String, Object> props = new HashMap<>();
+        props.put("dynamic.field", "name");
+
+        xformKey.configure(props);
+
+        final SourceRecord record = createCreateRecord();
 
         final SourceRecord transformedRecord = xformKey.apply(record);
 

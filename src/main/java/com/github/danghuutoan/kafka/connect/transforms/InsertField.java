@@ -40,10 +40,10 @@ import static org.apache.kafka.connect.transforms.util.Requirements.requireStruc
 
 public abstract class InsertField<R extends ConnectRecord<R>> implements Transformation<R> {
 
-    public static final String OVERVIEW_DOC =
-            "Insert field(s) using attributes from the record metadata or a configured static value."
-                    + "<p/>Use the concrete transformation type designed for the record key (<code>" + Key.class.getName() + "</code>) "
-                    + "or value (<code>" + Value.class.getName() + "</code>).";
+    public static final String OVERVIEW_DOC = "Insert field(s) using attributes from the record metadata or a configured static value."
+            + "<p/>Use the concrete transformation type designed for the record key (<code>" + Key.class.getName()
+            + "</code>) "
+            + "or value (<code>" + Value.class.getName() + "</code>).";
 
     private interface ConfigName {
         String TOPIC_FIELD = "topic.field";
@@ -52,6 +52,7 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         String TIMESTAMP_FIELD = "timestamp.field";
         String STATIC_FIELD = "static.field";
         String STATIC_VALUE = "static.value";
+        String DYNAMIC_FIELD = "dynamic.field";
     }
 
     private static final String OPTIONALITY_DOC = "Suffix with <code>!</code> to make this a required field, or <code>?</code> to keep it optional (the default).";
@@ -68,7 +69,9 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
             .define(ConfigName.STATIC_FIELD, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
                     "Field name for static data field. " + OPTIONALITY_DOC)
             .define(ConfigName.STATIC_VALUE, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
-                    "Static field value, if field name configured.");
+                    "Static field value, if field name configured.")
+            .define(ConfigName.DYNAMIC_FIELD, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
+                    "Field name for static data field. " + OPTIONALITY_DOC);
 
     private static final String PURPOSE = "field insertion";
 
@@ -84,7 +87,8 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         }
 
         public static InsertionSpec parse(String spec) {
-            if (spec == null) return null;
+            if (spec == null)
+                return null;
             if (spec.endsWith("?")) {
                 return new InsertionSpec(spec.substring(0, spec.length() - 1), true);
             }
@@ -100,6 +104,7 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
     private InsertionSpec offsetField;
     private InsertionSpec timestampField;
     private InsertionSpec staticField;
+    private InsertionSpec dynamicField;
     private String staticValue;
 
     private Cache<Schema, Schema> schemaUpdateCache;
@@ -112,14 +117,17 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         offsetField = InsertionSpec.parse(config.getString(ConfigName.OFFSET_FIELD));
         timestampField = InsertionSpec.parse(config.getString(ConfigName.TIMESTAMP_FIELD));
         staticField = InsertionSpec.parse(config.getString(ConfigName.STATIC_FIELD));
+        dynamicField = InsertionSpec.parse(config.getString(ConfigName.DYNAMIC_FIELD));
         staticValue = config.getString(ConfigName.STATIC_VALUE);
 
-        if (topicField == null && partitionField == null && offsetField == null && timestampField == null && staticField == null) {
+        if (topicField == null && partitionField == null && offsetField == null && timestampField == null
+                && staticField == null && dynamicField == null) {
             throw new ConfigException("No field insertion configured");
         }
 
         if (staticField != null && staticValue == null) {
-            throw new ConfigException(ConfigName.STATIC_VALUE, null, "No value specified for static field: " + staticField);
+            throw new ConfigException(ConfigName.STATIC_VALUE, null,
+                    "No value specified for static field: " + staticField);
         }
 
         schemaUpdateCache = new SynchronizedCache<>(new LRUCache<>(16));
@@ -156,6 +164,9 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         if (staticField != null && staticValue != null) {
             updatedValue.put(staticField.name, staticValue);
         }
+        if (dynamicField != null) {
+            updatedValue.put(dynamicField.name, staticValue);
+        }
 
         return newRecord(record, null, updatedValue);
     }
@@ -191,6 +202,9 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
             updatedValue.put(staticField.name, staticValue);
         }
 
+        if (dynamicField != null) {
+            updatedValue.put(dynamicField.name, staticValue);
+        }
         return newRecord(record, updatedSchema, updatedValue);
     }
 
@@ -205,7 +219,8 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
             builder.field(topicField.name, topicField.optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
         }
         if (partitionField != null) {
-            builder.field(partitionField.name, partitionField.optional ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA);
+            builder.field(partitionField.name,
+                    partitionField.optional ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA);
         }
         if (offsetField != null) {
             builder.field(offsetField.name, offsetField.optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA);
@@ -214,7 +229,8 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
             builder.field(timestampField.name, timestampField.optional ? OPTIONAL_TIMESTAMP_SCHEMA : Timestamp.SCHEMA);
         }
         if (staticField != null) {
-            builder.field(staticField.name, staticField.optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
+            builder.field(staticField.name,
+                    staticField.optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
         }
 
         return builder.build();
@@ -250,7 +266,8 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
 
         @Override
         protected R newRecord(R record, Schema updatedSchema, Object updatedValue) {
-            return record.newRecord(record.topic(), record.kafkaPartition(), updatedSchema, updatedValue, record.valueSchema(), record.value(), record.timestamp());
+            return record.newRecord(record.topic(), record.kafkaPartition(), updatedSchema, updatedValue,
+                    record.valueSchema(), record.value(), record.timestamp());
         }
 
     }
@@ -269,7 +286,8 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
 
         @Override
         protected R newRecord(R record, Schema updatedSchema, Object updatedValue) {
-            return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(), record.key(), updatedSchema, updatedValue, record.timestamp());
+            return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(), record.key(),
+                    updatedSchema, updatedValue, record.timestamp());
         }
 
     }
