@@ -41,23 +41,47 @@ public class InsertKeyTest {
 
     @Test
     public void schemaless() {
-        xform.configure(Collections.singletonMap("fields", "a,b"));
+            xform.configure(Collections.singletonMap("fields", "a,b"));
 
-        final HashMap<String, Integer> value = new HashMap<>();
-        value.put("a", 1);
-        value.put("b", 2);
-        value.put("c", 3);
+            final HashMap<String, Integer> value = new HashMap<>();
+            value.put("a", 1);
+            value.put("b", 2);
+            value.put("c", 3);
 
-        final SinkRecord record = new SinkRecord("", 0, null, null, null, value, 0);
-        final SinkRecord transformedRecord = xform.apply(record);
+            final SinkRecord record = new SinkRecord("", 0, null, null, null, value, 0);
+            final SinkRecord transformedRecord = xform.apply(record);
 
-        final HashMap<String, Integer> expectedKey = new HashMap<>();
-        expectedKey.put("a", 1);
-        expectedKey.put("b", 2);
+            final HashMap<String, Integer> expectedKey = new HashMap<>();
+            expectedKey.put("a", 1);
+            expectedKey.put("b", 2);
 
-        assertNull(transformedRecord.keySchema());
-        assertEquals(expectedKey, transformedRecord.key());
+            assertNull(transformedRecord.keySchema());
+            assertEquals(expectedKey, transformedRecord.key());
     }
+    
+    @Test
+    public void schemalessWithKeyAndNullValue() {
+            xform.configure(Collections.singletonMap("fields", "a,b"));
+        
+            final Schema keySchema = SchemaBuilder.struct()
+                .field("a", Schema.INT32_SCHEMA)
+                            .build();
+
+            final HashMap<String, Integer> value = new HashMap<>();
+            value.put("a", 1);
+            value.put("b", 2);
+            value.put("c", 3);
+            final HashMap<String, Integer> key = new HashMap<>();
+            key.put("a", 1);
+
+            final SinkRecord record = new SinkRecord("", 0, keySchema, key, null, null, 0);
+            final SinkRecord transformedRecord = xform.apply(record);
+
+            final HashMap<String, Integer> expectedKey = new HashMap<>();
+            expectedKey.put("a", 1);
+            assertEquals(expectedKey, transformedRecord.key());
+    }
+
 
     @Test
     public void withSchemaAndKey() {

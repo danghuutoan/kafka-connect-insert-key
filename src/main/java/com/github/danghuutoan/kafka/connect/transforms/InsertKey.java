@@ -66,6 +66,9 @@ public class InsertKey<R extends ConnectRecord<R>> implements Transformation<R> 
     @Override
     public R apply(R record) {
         if (record.valueSchema() == null) {
+            if (record.value() == null && record.key() != null) {
+                return record;
+            }
             return applySchemaless(record);
         } else {
             return applyWithSchema(record);
@@ -73,7 +76,7 @@ public class InsertKey<R extends ConnectRecord<R>> implements Transformation<R> 
     }
 
     private R applySchemaless(R record) {
-        final Map<String, Object> value = requireMap(record.value(), PURPOSE);
+        final Map<String, Object> value = record.value() != null ? requireMap(record.value(), PURPOSE) : null;
         final Map<String, Object> key = new HashMap<>(fields.size());
         for (String field : fields) {
             key.put(field, value.get(field));
